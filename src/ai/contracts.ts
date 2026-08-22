@@ -1,21 +1,26 @@
-export interface ParsedTaskIntent {
+import type { TaskKind, TaskPriority } from '../types/task';
+
+export interface AiTaskProposal {
   title: string;
-  kind: 'fixed' | 'flexible' | 'self-care';
+  kind: TaskKind;
+  priority: TaskPriority;
   durationMinutes?: number;
   deadline?: string;
-  priority: 'low' | 'medium' | 'high' | 'critical';
+  startsAt?: string;
   category?: string;
-}
-
-export interface YayaPlanRequest {
-  userMessage: string;
-  timezone: string;
-  muslimModeEnabled: boolean;
-  now: string;
+  notes?: string;
 }
 
 export interface YayaPlanProposal {
-  tasks: ParsedTaskIntent[];
+  message: string;
+  tasks: AiTaskProposal[];
   needsConfirmation: boolean;
-  explanation: string;
+}
+
+/**
+ * Boundary between an AI provider and the application.
+ * Provider-specific SDKs must not leak into the domain layer.
+ */
+export interface YayaInterpreter {
+  interpret(input: string): Promise<YayaPlanProposal>;
 }
