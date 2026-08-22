@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "Yaya'sDay",
+    "slug": "yaya-day",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "yaya-day",
+    "plugins": ["expo-router"],
+    "android": {
+      "package": "com.yayasday.app"
+    },
+    "ios": {
+      "bundleIdentifier": "com.yayasday.app"
+    }
+  }
+}
