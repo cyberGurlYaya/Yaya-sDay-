@@ -6,13 +6,27 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "scheme": "yaya-day",
-    "plugins": ["expo-router", "expo-notifications", "expo-splash-screen"],
+    "plugins": [
+      "expo-router",
+      "expo-notifications",
+      "expo-splash-screen"
+    ],
     "android": {
       "package": "com.yayasday.app",
-      "permissions": ["SCHEDULE_EXACT_ALARM", "POST_NOTIFICATIONS"]
+      "permissions": [
+        "SCHEDULE_EXACT_ALARM",
+        "POST_NOTIFICATIONS"
+      ]
     },
     "ios": {
       "bundleIdentifier": "com.yayasday.app"
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "d0693aeb-2c62-4a1e-a4f1-479cbe2baebb"
+      }
+    },
+    "owner": "hayjay15"
   }
 }
