@@ -13,8 +13,16 @@ import { BottomNav } from '../src/ui/bottom-nav';
 
 type Message={id:string;from:'yaya'|'user';text:string};
 
+type DeviceVoice = { identifier: string; language: string; name: string; quality?: string };
+
+function pickPreferredVoice(voices: DeviceVoice[]) {
+  const english = voices.filter(v => /^en(-|$)/i.test(v.language));
+  const female = english.filter(v => /female|woman|samantha|ava|jenny|aria|karen|moira|susan|google us english/i.test(`${v.name} ${v.identifier}`));
+  return female.find(v => /enhanced|high|premium|natural/i.test(`${v.name} ${v.quality ?? ''}`)) || female[0] || english.find(v => /^en-US$/i.test(v.language)) || english[0];
+}
+
 export default function Yaya(){
-  const { profile, addTask } = useAppStore();
+  const { profile, addTask, saveProfile } = useAppStore();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [text,setText]=useState('');
@@ -22,17 +30,21 @@ export default function Yaya(){
   const [listening,setListening]=useState(false);
   const transcriptRef=useRef('');
   const submittedRef=useRef(false);
-  const [voiceId,setVoiceId]=useState<string | undefined>();
+  const [voiceId,setVoiceId]=useState<string | undefined>(profile.voiceId);
   const [messages,setMessages]=useState<Message[]>([{id:'welcome',from:'yaya',text:`Hey ${profile.nickname||'you'} 🌸 I’m Yaya. Say everything that’s on your mind — even if it’s messy. I’ll turn it into a realistic day.`}]);
 
   useEffect(()=>{
     Speech.getAvailableVoicesAsync().then(voices=>{
-      const preferred=voices.find(v=>/samantha|karen|moira|female|woman|ava/i.test(`${v.name} ${v.identifier}`) && /^en/i.test(v.language)) || voices.find(v=>/^en/i.test(v.language));
-      setVoiceId(preferred?.identifier);
+      const selected=profile.voiceId ? voices.find(v=>v.identifier===profile.voiceId) : undefined;
+      const preferred=selected || pickPreferredVoice(voices);
+      if(preferred){
+        setVoiceId(preferred.identifier);
+        if(!profile.voiceId) saveProfile({voiceId:preferred.identifier});
+      }
     }).catch(()=>undefined);
-  },[]);
+  },[profile.voiceId,saveProfile]);
 
-  const speak=(value:string)=>Speech.speak(value,{rate:0.98,pitch:1.08,voice:voiceId});
+  const speak=(value:string)=>Speech.speak(value,{language:'en-US',rate:0.93,pitch:1.02,volume:1,voice:voiceId});
 
   const submit=async(value:string)=>{
     const clean=value.trim();
@@ -113,5 +125,4 @@ export default function Yaya(){
   </View>;
 }
 
-const styles=StyleSheet.create({page:{flex:1,backgroundColor:colors.cream},shell:{flex:1,backgroundColor:colors.cream},header:{minHeight:66,paddingHorizontal:12,flexDirection:'row',alignItems:'center',justifyContent:'space-between',borderBottomWidth:1,borderBottomColor:'#EEE6F2',backgroundColor:colors.white},backButton:{width:42,height:42,alignItems:'center',justifyContent:'center'},back:{fontSize:34,color:colors.plum},brandRow:{flexDirection:'row',alignItems:'center',flex:1,justifyContent:'center'},avatar:{width:40,height:40,borderRadius:20,backgroundColor:colors.primary,alignItems:'center',justifyContent:'center',marginRight:9},avatarText:{color:colors.white,fontWeight:'900',fontSize:19},headerTitle:{fontSize:18,fontWeight:'900',color:colors.plum},headerSub:{fontSize:11,color:colors.mutedPlum,marginTop:2},messages:{padding:16,paddingBottom:24},brandIntro:{alignItems:'center',paddingVertical:12},brandMark:{width:58,height:58,borderRadius:29,backgroundColor:colors.softPink,textAlign:'center',textAlignVertical:'center',color:colors.plum,fontSize:28,fontWeight:'900',paddingTop:10},brandName:{fontSize:20,fontWeight:'900',color:colors.plum,marginTop:8},brandTagline:{fontSize:12,color:colors.mutedPlum,marginTop:2},bubble:{maxWidth:'88%',borderRadius:20,padding:14,marginBottom:10},yayaBubble:{backgroundColor:colors.white,alignSelf:'flex-start',borderTopLeftRadius:7},userBubble:{backgroundColor:colors.primary,alignSelf:'flex-end',borderTopRightRadius:7},bubbleHeader:{flexDirection:'row',alignItems:'flex-end'},bubbleText:{color:colors.plum,fontSize:15,lineHeight:22,flex:1},userText:{color:colors.white},listen:{fontSize:15,marginLeft:8},listeningCard:{backgroundColor:'#F2EDF9',borderRadius:20,padding:14,flexDirection:'row',alignItems:'center',marginTop:4},pulse:{width:46,height:46,borderRadius:23,backgroundColor:colors.babyPink,alignItems:'center',justifyContent:'center',marginRight:12},mic:{fontSize:22},listeningTitle:{color:colors.plum,fontSize:14,fontWeight:'900'},listeningCopy:{color:colors.mutedPlum,fontSize:12,marginTop:3,maxWidth:250,lineHeight:17},composer:{backgroundColor:colors.white,borderTopWidth:1,borderTopColor:'#EEE6F2',padding:10,flexDirection:'row',alignItems:'flex-end'},input:{flex:1,maxHeight:100,minHeight:46,borderRadius:18,backgroundColor:colors.cream,paddingHorizontal:15,paddingVertical:12,color:colors.plum,fontSize:15},micButton:{marginLeft:7,width:46,height:46,borderRadius:23,backgroundColor:colors.mint,alignItems:'center',justifyContent:'center'},micButtonActive:{backgroundColor:colors.babyPink},micButtonText:{fontSize:18,color:colors.plum,fontWeight:'900'},send:{marginLeft:7,width:46,height:46,borderRadius:23,backgroundColor:colors.primary,alignItems:'center',justifyContent:'center'},sendDisabled:{opacity:.45},sendText:{color:colors.white,fontSize:25,fontWeight:'900'},helper:{fontSize:10,color:colors.mutedPlum,textAlign:'center',paddingVertical:7,backgroundColor:colors.white}}
-);
+const styles=StyleSheet.create({page:{flex:1,backgroundColor:colors.cream},shell:{flex:1,backgroundColor:colors.cream},header:{minHeight:66,paddingHorizontal:12,flexDirection:'row',alignItems:'center',justifyContent:'space-between',borderBottomWidth:1,borderBottomColor:'#EEE6F2',backgroundColor:colors.white},backButton:{width:42,height:42,alignItems:'center',justifyContent:'center'},back:{fontSize:34,color:colors.plum},brandRow:{flexDirection:'row',alignItems:'center',flex:1,justifyContent:'center'},avatar:{width:40,height:40,borderRadius:20,backgroundColor:colors.primary,alignItems:'center',justifyContent:'center',marginRight:9},avatarText:{color:colors.white,fontWeight:'900',fontSize:19},headerTitle:{fontSize:18,fontWeight:'900',color:colors.plum},headerSub:{fontSize:11,color:colors.mutedPlum,marginTop:2},messages:{padding:16,paddingBottom:24},brandIntro:{alignItems:'center',paddingVertical:12},brandMark:{width:58,height:58,borderRadius:29,backgroundColor:colors.softPink,textAlign:'center',textAlignVertical:'center',color:colors.plum,fontSize:28,fontWeight:'900',paddingTop:10},brandName:{fontSize:20,fontWeight:'900',color:colors.plum,marginTop:8},brandTagline:{fontSize:12,color:colors.mutedPlum,marginTop:2},bubble:{maxWidth:'88%',borderRadius:20,padding:14,marginBottom:10},yayaBubble:{backgroundColor:colors.white,alignSelf:'flex-start',borderTopLeftRadius:7},userBubble:{backgroundColor:colors.primary,alignSelf:'flex-end',borderTopRightRadius:7},bubbleHeader:{flexDirection:'row',alignItems:'flex-end'},bubbleText:{color:colors.plum,fontSize:15,lineHeight:22,flex:1},userText:{color:colors.white},listen:{fontSize:15,marginLeft:8},listeningCard:{backgroundColor:'#F2EDF9',borderRadius:20,padding:14,flexDirection:'row',alignItems:'center',marginTop:4},pulse:{width:46,height:46,borderRadius:23,backgroundColor:colors.babyPink,alignItems:'center',justifyContent:'center',marginRight:12},mic:{fontSize:22},listeningTitle:{color:colors.plum,fontSize:14,fontWeight:'900'},listeningCopy:{color:colors.mutedPlum,fontSize:12,marginTop:3,maxWidth:250,lineHeight:17},composer:{backgroundColor:colors.white,borderTopWidth:1,borderTopColor:'#EEE6F2',padding:10,flexDirection:'row',alignItems:'flex-end'},input:{flex:1,maxHeight:100,minHeight:46,borderRadius:18,backgroundColor:colors.cream,paddingHorizontal:15,paddingVertical:12,color:colors.plum,fontSize:15},micButton:{marginLeft:7,width:46,height:46,borderRadius:23,backgroundColor:colors.mint,alignItems:'center',justifyContent:'center'},micButtonActive:{backgroundColor:colors.babyPink},micButtonText:{fontSize:18,color:colors.plum,fontWeight:'900'},send:{marginLeft:7,width:46,height:46,borderRadius:23,backgroundColor:colors.primary,alignItems:'center',justifyContent:'center'},sendDisabled:{opacity:.45},sendText:{color:colors.white,fontSize:25,fontWeight:'900'},helper:{fontSize:10,color:colors.mutedPlum,textAlign:'center',paddingVertical:7,backgroundColor:colors.white}});
