@@ -8,12 +8,13 @@ export type YayaProfile = {
   nickname: string;
   personality: Personality;
   muslimMode: boolean;
+  voiceId?: string;
   onboardingComplete: boolean;
   onboardingVersion: number;
 };
 
 const STORAGE_KEY = '@yayasday/state/v1';
-export const CURRENT_ONBOARDING_VERSION = 2;
+export const CURRENT_ONBOARDING_VERSION = 3;
 
 export type AppState = {
   profile: YayaProfile;
@@ -21,7 +22,7 @@ export type AppState = {
 };
 
 const defaultState: AppState = {
-  profile: { name: '', nickname: '', personality: 'friendly', muslimMode: false, onboardingComplete: false, onboardingVersion: 0 },
+  profile: { name: '', nickname: '', personality: 'friendly', muslimMode: false, voiceId: undefined, onboardingComplete: false, onboardingVersion: 0 },
   tasks: [],
 };
 
