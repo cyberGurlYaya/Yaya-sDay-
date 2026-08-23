@@ -15,14 +15,27 @@ const personalities = [
 function nicknameIdeas(name: string) {
   const first = (name.trim() || 'Yaya').split(/\s+/)[0];
   const lower = first.toLowerCase();
-  const ideas = new Set<string>([first]);
-  if (first.length >= 4) ideas.add(first.slice(0, 3));
-  if (first.length >= 5) ideas.add(first.slice(1));
-  if (lower === 'alia') ['Ali', 'Lia', 'Lili', 'Yaya'].forEach(x => ideas.add(x));
-  if (lower === 'aaliyah') ['Aali', 'Lia', 'Yaya', 'Lily'].forEach(x => ideas.add(x));
-  if (lower === 'olamide') ['Ola', 'Lami', 'Mide'].forEach(x => ideas.add(x));
-  if (lower === 'adegoke') ['Ade', 'Goke', 'Koke'].forEach(x => ideas.add(x));
-  return Array.from(ideas).slice(0, 4);
+  const ideas: string[] = [];
+  const add = (value: string) => {
+    const clean = value.trim();
+    if (clean && clean.length >= 2 && !ideas.some(item => item.toLowerCase() === clean.toLowerCase())) ideas.push(clean);
+  };
+
+  add(first);
+  if (first.length >= 3) add(first.slice(0, 3));
+  if (first.length >= 4) add(first.slice(1));
+  if (first.length >= 5) add(first.slice(0, 2) + first.slice(-1));
+
+  const known: Record<string, string[]> = {
+    alia: ['Ali', 'Lia', 'Lili', 'Yaya'],
+    aaliyah: ['Aali', 'Ali', 'Lia', 'Lily', 'Yaya'],
+    olamide: ['Ola', 'Lami', 'Mide'],
+    adegoke: ['Ade', 'Goke', 'Koke'],
+    ayomide: ['Ayo', 'Mide', 'Yomi'],
+    ayoola: ['Ayo', 'Yola', 'Yoyo'],
+  };
+  (known[lower] ?? []).forEach(add);
+  return ideas.slice(0, 4);
 }
 
 export default function Onboarding() {
@@ -56,7 +69,7 @@ export default function Onboarding() {
     </>}
     {step === 'nickname' && <>
       <Text style={styles.title}>Pick a nickname 💜</Text>
-      <Text style={styles.body}>I’ll suggest playful versions of your real name — short, familiar and easy to say. No random aesthetic names.</Text>
+      <Text style={styles.body}>I’ll suggest fun little versions of your actual name — like Alia → Lia, Lili, Ali or Yaya. No random aesthetic names.</Text>
       <View>{ideas.map(idea => <Choice key={idea} label={idea} detail="A name-based nickname" selected={nickname === idea} onPress={() => setNickname(idea)} />)}</View>
       <Choice label="Keep my name" detail={name || 'Your name'} selected={nickname === name} onPress={() => setNickname(name)} />
       <TextInput value={nickname} onChangeText={setNickname} placeholder="Or create your own nickname ✍️" placeholderTextColor={colors.mutedPlum} style={styles.input} />
@@ -77,24 +90,31 @@ export default function Onboarding() {
 }
 
 function Welcome({ onContinue }: { onContinue: () => void }) {
-  const flowerScale = useRef(new Animated.Value(0.25)).current;
+  const bloom = useRef(new Animated.Value(0)).current;
   const contentOpacity = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(flowerScale, { toValue: 1, duration: 850, easing: Easing.out(Easing.back(1.15)), useNativeDriver: true }),
-      Animated.timing(contentOpacity, { toValue: 1, duration: 650, delay: 250, useNativeDriver: true }),
+      Animated.timing(bloom, { toValue: 1, duration: 1050, easing: Easing.out(Easing.back(1.2)), useNativeDriver: true }),
+      Animated.timing(contentOpacity, { toValue: 1, duration: 700, delay: 350, useNativeDriver: true }),
     ]).start();
-  }, [contentOpacity, flowerScale]);
+  }, [bloom, contentOpacity]);
+
+  const flowerScale = bloom.interpolate({ inputRange: [0, 1], outputRange: [0.2, 1] });
+  const flowerOpacity = bloom.interpolate({ inputRange: [0, 0.35, 1], outputRange: [0, 0.65, 1] });
   return <SafeAreaView style={styles.container}><View style={styles.welcome}>
-    <Animated.View style={[styles.flowerWrap, { transform: [{ scale: flowerScale }] }]}>
+    <Animated.View style={[styles.flowerWrap, { transform: [{ scale: flowerScale }], opacity: flowerOpacity }]}>
       <View style={styles.flowerGlow} />
-      <Text style={styles.flower}>✿</Text>
+      <View style={[styles.petal, styles.petalTop]} /><View style={[styles.petal, styles.petalTopRight]} />
+      <View style={[styles.petal, styles.petalRight]} /><View style={[styles.petal, styles.petalBottomRight]} />
+      <View style={[styles.petal, styles.petalBottom]} /><View style={[styles.petal, styles.petalBottomLeft]} />
+      <View style={[styles.petal, styles.petalLeft]} /><View style={[styles.petal, styles.petalTopLeft]} />
+      <View style={styles.flowerCenter}><Text style={styles.flowerCenterText}>Y</Text></View>
     </Animated.View>
     <Animated.View style={[styles.welcomeCopy, { opacity: contentOpacity }]}>
       <Text style={styles.welcomeEyebrow}>WELCOME TO</Text>
       <Text style={styles.brand}>Yaya'sDay</Text>
       <Text style={styles.welcomeTitle}>Your day, but a little easier. 🌸</Text>
-      <Text style={styles.welcomeBody}>Tell Yaya what’s on your mind. She’ll help you turn the messy list in your head into a day that actually feels doable.</Text>
+      <Text style={styles.welcomeBody}>Welcome. Tell Yaya what’s on your mind — even when it comes out messy. She’ll help turn the things in your head into a day that actually feels doable.</Text>
       <PrimaryButton title="Meet Yaya" onPress={onContinue} />
     </Animated.View>
   </View></SafeAreaView>;
@@ -104,5 +124,5 @@ function Choice({ label, detail, selected, onPress }: { label: string; detail: s
 function PrimaryButton({ title, onPress }: { title: string; onPress: () => void }) { return <Pressable onPress={onPress} style={styles.button}><Text style={styles.buttonText}>{title}</Text></Pressable>; }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.cream }, welcome: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28, paddingVertical: 36 }, flowerWrap: { width: 205, height: 205, borderRadius: 103, backgroundColor: colors.babyPink, alignItems: 'center', justifyContent: 'center', shadowColor: colors.primary, shadowOpacity: 0.16, shadowRadius: 28, elevation: 8 }, flowerGlow: { position: 'absolute', width: 160, height: 160, borderRadius: 80, backgroundColor: '#FFF9F2', opacity: 0.45 }, flower: { fontSize: 105, color: colors.primary }, welcomeCopy: { width: '100%', alignItems: 'center', marginTop: 28 }, welcomeEyebrow: { color: colors.primary, fontSize: 12, fontWeight: '900', letterSpacing: 2.2 }, brand: { color: colors.plum, fontSize: 39, fontWeight: '900', marginTop: 5 }, welcomeTitle: { color: colors.plum, fontSize: 22, lineHeight: 29, fontWeight: '800', textAlign: 'center', marginTop: 13 }, welcomeBody: { color: colors.mutedPlum, fontSize: 15, lineHeight: 23, textAlign: 'center', marginTop: 10, marginBottom: 10, maxWidth: 350 }, content: { flex: 1, padding: 28, justifyContent: 'center' }, stepLabel: { color: colors.primary, fontSize: 14, fontWeight: '800', marginBottom: 12 }, title: { color: colors.plum, fontSize: 29, lineHeight: 36, fontWeight: '800' }, body: { color: colors.mutedPlum, fontSize: 16, lineHeight: 24, marginTop: 12, marginBottom: 20 }, input: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.babyPink, borderRadius: 18, paddingHorizontal: 18, paddingVertical: 16, color: colors.plum, fontSize: 17, marginTop: 8, marginBottom: 14 }, choice: { backgroundColor: colors.white, borderRadius: 18, borderWidth: 1, borderColor: '#E8DFF0', padding: 16, marginBottom: 10 }, choiceSelected: { borderColor: colors.primary, backgroundColor: '#F5F0FC' }, choiceLabel: { color: colors.plum, fontSize: 16, fontWeight: '800' }, choiceDetail: { color: colors.mutedPlum, fontSize: 13, marginTop: 4, lineHeight: 19 }, button: { width: '100%', backgroundColor: colors.primary, borderRadius: 18, alignItems: 'center', paddingVertical: 16, marginTop: 12 }, buttonText: { color: colors.white, fontSize: 16, fontWeight: '800' },
+  container: { flex: 1, backgroundColor: colors.cream }, welcome: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28, paddingVertical: 36 }, flowerWrap: { width: 210, height: 210, borderRadius: 105, backgroundColor: '#FFF7FB', alignItems: 'center', justifyContent: 'center', shadowColor: colors.primary, shadowOpacity: 0.2, shadowRadius: 28, elevation: 9 }, flowerGlow: { position: 'absolute', width: 170, height: 170, borderRadius: 85, backgroundColor: colors.babyPink, opacity: 0.28 }, petal: { position: 'absolute', width: 70, height: 92, borderRadius: 45, backgroundColor: colors.softPink }, petalTop: { top: 16 }, petalTopRight: { top: 31, right: 32, transform: [{ rotate: '45deg' }] }, petalRight: { right: 10, transform: [{ rotate: '90deg' }] }, petalBottomRight: { bottom: 31, right: 32, transform: [{ rotate: '135deg' }] }, petalBottom: { bottom: 16 }, petalBottomLeft: { bottom: 31, left: 32, transform: [{ rotate: '-135deg' }] }, petalLeft: { left: 10, transform: [{ rotate: '90deg' }] }, petalTopLeft: { top: 31, left: 32, transform: [{ rotate: '-45deg' }] }, flowerCenter: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 5, borderColor: '#FFF7FB' }, flowerCenterText: { color: colors.white, fontSize: 30, fontWeight: '900' }, welcomeCopy: { width: '100%', alignItems: 'center', marginTop: 28 }, welcomeEyebrow: { color: colors.primary, fontSize: 12, fontWeight: '900', letterSpacing: 2.2 }, brand: { color: colors.plum, fontSize: 39, fontWeight: '900', marginTop: 5 }, welcomeTitle: { color: colors.plum, fontSize: 22, lineHeight: 29, fontWeight: '800', textAlign: 'center', marginTop: 13 }, welcomeBody: { color: colors.mutedPlum, fontSize: 15, lineHeight: 23, textAlign: 'center', marginTop: 10, marginBottom: 10, maxWidth: 350 }, content: { flex: 1, padding: 28, justifyContent: 'center' }, stepLabel: { color: colors.primary, fontSize: 14, fontWeight: '800', marginBottom: 12 }, title: { color: colors.plum, fontSize: 29, lineHeight: 36, fontWeight: '800' }, body: { color: colors.mutedPlum, fontSize: 16, lineHeight: 24, marginTop: 12, marginBottom: 20 }, input: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.babyPink, borderRadius: 18, paddingHorizontal: 18, paddingVertical: 16, color: colors.plum, fontSize: 17, marginTop: 8, marginBottom: 14 }, choice: { backgroundColor: colors.white, borderRadius: 18, borderWidth: 1, borderColor: '#E8DFF0', padding: 16, marginBottom: 10 }, choiceSelected: { borderColor: colors.primary, backgroundColor: '#F5F0FC' }, choiceLabel: { color: colors.plum, fontSize: 16, fontWeight: '800' }, choiceDetail: { color: colors.mutedPlum, fontSize: 13, marginTop: 4, lineHeight: 19 }, button: { width: '100%', backgroundColor: colors.primary, borderRadius: 18, alignItems: 'center', paddingVertical: 16, marginTop: 12 }, buttonText: { color: colors.white, fontSize: 16, fontWeight: '800' },
 });
