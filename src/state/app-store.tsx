@@ -9,9 +9,11 @@ export type YayaProfile = {
   personality: Personality;
   muslimMode: boolean;
   onboardingComplete: boolean;
+  onboardingVersion: number;
 };
 
 const STORAGE_KEY = '@yayasday/state/v1';
+export const CURRENT_ONBOARDING_VERSION = 2;
 
 export type AppState = {
   profile: YayaProfile;
@@ -19,7 +21,7 @@ export type AppState = {
 };
 
 const defaultState: AppState = {
-  profile: { name: '', nickname: '', personality: 'friendly', muslimMode: false, onboardingComplete: false },
+  profile: { name: '', nickname: '', personality: 'friendly', muslimMode: false, onboardingComplete: false, onboardingVersion: 0 },
   tasks: [],
 };
 
@@ -41,7 +43,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then(raw => {
       if (raw) {
-        try { setState(JSON.parse(raw)); } catch { setState(defaultState); }
+        try {
+          const parsed = JSON.parse(raw) as AppState;
+          setState({
+            ...defaultState,
+            ...parsed,
+            profile: { ...defaultState.profile, ...(parsed.profile ?? {}) },
+          });
+        } catch { setState(defaultState); }
       }
       setHydrated(true);
     }).catch(() => setHydrated(true));
