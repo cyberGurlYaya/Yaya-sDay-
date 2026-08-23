@@ -9,17 +9,30 @@
     "plugins": [
       "expo-router",
       "expo-notifications",
-      "expo-splash-screen"
+      "expo-splash-screen",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Yaya needs your microphone so you can tell her what's on your mind.",
+          "speechRecognitionPermission": "Yaya uses speech recognition to turn your words into tasks.",
+          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+        }
+      ]
     ],
     "android": {
       "package": "com.yayasday.app",
       "permissions": [
         "SCHEDULE_EXACT_ALARM",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "RECORD_AUDIO"
       ]
     },
     "ios": {
-      "bundleIdentifier": "com.yayasday.app"
+      "bundleIdentifier": "com.yayasday.app",
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "Yaya uses speech recognition to turn what you say into an organized day.",
+        "NSMicrophoneUsageDescription": "Yaya needs your microphone so you can speak your tasks instead of typing them."
+      }
     },
     "extra": {
       "router": {},
