@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import * as Speech from 'expo-speech';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../src/theme/colors';
@@ -94,12 +94,24 @@ export default function Yaya() {
   };
 
   const scrollToLatest = (animated = true) => {
-    requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated }));
+    const scroll = () => scrollRef.current?.scrollToEnd({ animated });
+    requestAnimationFrame(scroll);
+    setTimeout(scroll, 70);
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 180);
   };
 
   useEffect(() => {
     if (messages.length) scrollToLatest(false);
   }, [messages.length]);
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => scrollToLatest(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => scrollToLatest(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   const submit = async (value: string, existingMessageId?: string) => {
     const clean = value.trim();
@@ -152,7 +164,7 @@ export default function Yaya() {
     if (busy) return;
     setEditingId(message.id);
     setText(message.text);
-    scrollToLatest();
+    setTimeout(() => scrollToLatest(true), 80);
   };
 
   const cancelEdit = () => {
@@ -217,6 +229,7 @@ export default function Yaya() {
           style={styles.scroll}
           contentContainerStyle={styles.messages}
           keyboardShouldPersistTaps="handled"
+          scrollEventThrottle={16}
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           onContentSizeChange={() => scrollToLatest(false)}
         >
@@ -252,8 +265,10 @@ export default function Yaya() {
             placeholderTextColor={colors.mutedPlum}
             style={styles.input}
             multiline
+            scrollEnabled
             blurOnSubmit={false}
-            onFocus={() => scrollToLatest()}
+            returnKeyType="default"
+            onFocus={() => setTimeout(() => scrollToLatest(true), 80)}
           />
           {!editing && <Pressable onPress={toggleListening} disabled={busy} style={[styles.micButton, listening && styles.micButtonActive]}><Text style={styles.micButtonText}>{listening ? '■' : '🎙️'}</Text></Pressable>}
           <Pressable onPress={() => void submit(text, editingId || undefined)} disabled={busy || !text.trim()} style={[styles.send, !text.trim() && styles.sendDisabled]}>
@@ -279,7 +294,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: '900', color: colors.plum },
   headerSub: { fontSize: 11, color: colors.mutedPlum, marginTop: 2 },
   scroll: { flex: 1 },
-  messages: { padding: 16, paddingBottom: 28 },
+  messages: { padding: 16, paddingBottom: 120 },
   brandIntro: { alignItems: 'center', paddingVertical: 12 },
   flowerMark: { width: 60, height: 60, borderRadius: 30, backgroundColor: colors.softPink, alignItems: 'center', justifyContent: 'center' },
   flower: { fontSize: 31 },
