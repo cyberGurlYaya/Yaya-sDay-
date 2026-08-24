@@ -1,6 +1,7 @@
 export const colors = {
   primary: '#9B7EDB',
   babyPink: '#F3B6C8',
+  softPink: '#F3B6C8',
   mint: '#A9DCCB',
   sky: '#A9D4F5',
   cream: '#FFF9F2',
