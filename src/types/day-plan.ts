@@ -14,3 +14,11 @@ export interface DayPlan {
   tasks: Task[];
   schedule: ScheduleItem[];
 }
+
+export type ReplanEvent =
+  | { type: 'task-completed'; taskId: string }
+  | { type: 'task-skipped'; taskId: string }
+  | { type: 'task-delayed'; taskId: string; minutes: number }
+  | { type: 'task-added'; task: Task }
+  | { type: 'commitment-changed'; taskId: string; startsAt?: string; deadline?: string }
+  | { type: 'user-tired' };

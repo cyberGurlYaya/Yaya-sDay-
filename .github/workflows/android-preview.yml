@@ -2,9 +2,13 @@ name: Yaya'sDay Android Preview
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - v1-complete-build
 
 jobs:
   build-preview:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build-v1]')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
