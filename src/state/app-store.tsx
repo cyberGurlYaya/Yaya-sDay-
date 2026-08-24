@@ -32,6 +32,7 @@ type AppStore = AppState & {
   addTask: (task: Task) => void;
   updateTask: (id: string, patch: Partial<Task>) => void;
   removeTask: (id: string) => void;
+  removeTasksBySourceMessageId: (messageId: string) => void;
   resetAll: () => void;
 };
 
@@ -68,6 +69,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     addTask: task => setState(prev => ({ ...prev, tasks: [task, ...prev.tasks] })),
     updateTask: (id, patch) => setState(prev => ({ ...prev, tasks: prev.tasks.map(t => t.id === id ? { ...t, ...patch } : t) })),
     removeTask: id => setState(prev => ({ ...prev, tasks: prev.tasks.filter(t => t.id !== id) })),
+    removeTasksBySourceMessageId: messageId => setState(prev => ({ ...prev, tasks: prev.tasks.filter(t => t.sourceMessageId !== messageId) })),
     resetAll: () => setState(defaultState),
   }), [state, hydrated]);
 
