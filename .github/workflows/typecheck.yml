@@ -2,7 +2,7 @@ name: TypeScript check
 
 on:
   push:
-    branches: [main]
+    branches: [main, prelaunch-phase-1-5]
   pull_request:
 
 jobs:
