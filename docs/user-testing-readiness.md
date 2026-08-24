@@ -1,56 +1,89 @@
-# Yaya'sDay — User Testing Readiness
+# Yaya'sDay — Version 1 User Testing Readiness
 
-## Product contract
-- Yaya is a companion, not a generic to-do list.
-- Users can brain-dump naturally; they should not have to organize tasks first.
-- Rest, meals and breathing room are first-class scheduling inputs.
-- Fixed commitments and protected spiritual time outrank flexible tasks.
-- Yaya adapts when plans change without shaming the user.
-- Muslim Mode is optional and compassionate.
-- Personalization is user-controlled and reversible.
-- AI proposes/understands; deterministic application logic validates and executes.
+This checklist is aligned to the Notion V1/V1.1 technical architecture. The Notion architecture is the product source of truth; this document is the repository-side QA gate.
 
-## Current functional foundation
-- Persistent local profile and task storage.
-- Personalized onboarding with generated nickname ideas and custom nickname input.
-- Personality selection.
-- Optional Muslim Mode setting.
-- My Day view connected to real task state.
-- Natural-language task capture with deterministic fallback parser.
-- Deterministic day scheduling engine.
-- Task completion/removal.
-- Schedule view.
-- Yaya chat surface.
-- Local reminder notification service.
-- Settings and Kids Mode product shell.
-- Plus/monetization product surface.
+## V1 product contract
+- Yaya is a warm, intelligent companion, not a generic to-do list.
+- Natural language and voice are first-class interactions.
+- A messy brain-dump must be accepted without formatting.
+- Yaya plans rather than merely records tasks.
+- Fixed commitments are protected.
+- Flexible tasks can move.
+- Sleep, meals, rest, buffers and personal time are legitimate schedule elements.
+- Yaya never shames the user for missed tasks or worship.
+- AI interprets/proposes; deterministic application logic validates and executes.
+- The experience stays warm and engaging without becoming noisy or childish.
 
-## Before external user testing
-1. Install dependencies with `npx expo install --fix`.
-2. Run typecheck and fix all errors.
-3. Verify Expo Go/development build uses the same SDK/native runtime as the project.
-4. Verify onboarding persistence across reloads.
-5. Verify task creation, completion and deletion.
-6. Verify schedule output against the golden day-planning test case.
-7. Verify notification permission and a short local reminder on a physical Android device.
-8. Add production AI endpoint with secrets kept server-side; keep local parser as offline fallback.
-9. Add real speech recognition in a development build; Expo Go is not sufficient for custom native speech modules.
-10. Add authentication/backend only when multi-device sync, parent-child linking, subscriptions or cloud AI require it.
-11. Add billing provider and server-side entitlement verification before charging users.
-12. Add privacy policy, terms, data deletion flow and production analytics consent.
-13. Build signed Android/iOS test binaries and run a structured QA pass.
+## V1 scope gate
+### Onboarding
+- [ ] Personalized welcome
+- [ ] Flower closes → blooms → expands → reveals Yaya'sDay
+- [ ] Name capture
+- [ ] Name-based fun nicknames
+- [ ] Generate more nicknames
+- [ ] Custom nickname
+- [ ] Keep original name
+- [ ] Gentle / Friendly / Firm / Strict personality
+- [ ] Optional Muslim Mode
+
+### Core day experience
+- [ ] My Day home screen
+- [ ] Natural-language task capture
+- [ ] Voice input through native microphone + speech-to-text
+- [ ] Task extraction and confirmation when ambiguity matters
+- [ ] Fixed/flexible/self-care classification
+- [ ] Priority and deadline understanding
+- [ ] Duration estimation
+- [ ] Deterministic scheduling
+- [ ] Rest and buffer insertion
+- [ ] Task complete / skip / edit / delay / reschedule
+- [ ] Adaptive replanning after changes
+- [ ] Notifications/reminders
+- [ ] Talk to Yaya
+- [ ] Encouraging progress reflection
+
+### Muslim Mode
+- [ ] Optional activation
+- [ ] Prayer times treated as protected anchors when available
+- [ ] Qur'an / dhikr / du'a / selected spiritual practices
+- [ ] Compassionate reminders
+- [ ] No shame/punishment for missed practices
+- [ ] Ramadan/accountability expansion remains future scope
+
+### Technical foundation
+- [ ] React Native + Expo + TypeScript mobile
+- [ ] Server-side AI orchestration with no provider secrets in the mobile bundle
+- [ ] Structured AI contract and validation boundary
+- [ ] Application-owned deterministic scheduling engine
+- [ ] Persistent user/task/day-plan state
+- [ ] Feature-specific permissions only
+- [ ] Android real-device support for V1 device features
+- [ ] Production authentication/cloud persistence before public launch
+- [ ] Basic monetization foundation without artificially blocking the core experience
 
 ## Golden test case
-"I need to pray Tahajjud by 4:30 in the morning, read Qur'an for 10 minutes, pray Fajr, clean my room, have my bath, take tea/breakfast, study cybersecurity for two hours, work on my app, pray Zuhr, cook lunch, and I need time to rest in between because I know I'm going to get tired."
+"Okay, I need to pray Tahajjud by 4:30 in the morning, can you kindly wake me, read Qur'an for 10 minutes, pray Fajr, clean my room, have my bath, take tea/breakfast, study cybersecurity for two hours, work on my app, pray Zuhr, cook lunch, and I need time to rest in between because I know I'm going to get tired."
 
-Expected behavior: extract tasks, protect fixed commitments, estimate reasonable durations, preserve rest and buffers, produce a realistic schedule, and allow the user to reshuffle it when life changes.
+Expected: Yaya separates the actions, protects explicit/fixed commitments, estimates sensible durations, inserts rest and buffers, avoids filling every minute, and produces a realistic plan.
 
-## Launch blockers
-- Real AI backend and safety/validation layer
-- Native speech input + eventual wake-word architecture
-- Android Focus Mode native implementation
-- Parent/child authenticated backend and permissions
-- Subscription/payment integration
-- Production authentication/sync strategy
-- Security/privacy review
-- Device QA and store compliance
+## Adaptive test cases
+1. User completes a task early → remaining plan is recalculated.
+2. User delays a flexible task → flexible work moves without unnecessarily moving protected items.
+3. User skips a task → it is not treated as a moral failure; the remaining plan is recalculated.
+4. User says they are tired → breathing room/self-care is preserved and lower-value flexible work can move.
+5. User adds a new urgent task → scheduler incorporates it while protecting fixed commitments.
+6. A fixed commitment changes → remaining flexible work is replanned around the new anchor.
+
+## Device QA
+- [ ] Fresh install opens the blooming welcome screen.
+- [ ] Onboarding survives app restart.
+- [ ] Voice permission works on a physical Android device.
+- [ ] Speech recognition captures a messy multi-task brain dump.
+- [ ] Yaya can fall back to typing when voice is unavailable.
+- [ ] Reminder permission works and a short test reminder fires.
+- [ ] Layout remains usable across small and large Android screens.
+- [ ] Settings remain sectioned and readable.
+- [ ] Reset flow clears local test data cleanly.
+
+## Launch gate
+A build is a **V1 user-testing candidate** only when the product scope above is implemented and the golden/adaptive/device test cases pass. Monetization and public launch work starts after user testing, not before.
