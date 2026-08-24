@@ -6,11 +6,21 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "scheme": "yaya-day",
+    "backgroundColor": "#FFF9F2",
+    "primaryColor": "#F2A7BB",
     "icon": "./assets/icon.png",
     "plugins": [
       "expo-router",
       "expo-notifications",
-      "expo-splash-screen",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/icon.png",
+          "backgroundColor": "#FFF9F2",
+          "imageWidth": 180,
+          "resizeMode": "contain"
+        }
+      ],
       [
         "expo-speech-recognition",
         {
@@ -22,6 +32,9 @@
     ],
     "android": {
       "package": "com.yayasday.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#FFF9F2"
+      },
       "permissions": [
         "SCHEDULE_EXACT_ALARM",
         "POST_NOTIFICATIONS",
