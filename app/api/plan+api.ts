@@ -1,4 +1,5 @@
 import type { YayaPlanProposal } from '../../src/ai/contracts';
+import { validateYayaProposal } from '../../src/ai/validation';
 
 const SYSTEM_PROMPT = `You are Yaya, a warm, practical AI day-planning companion for people who hate typing their to-do lists. Your user may speak in a messy brain-dump: fragments, filler words, repeated thoughts, corrections, several tasks in one sentence, or tasks mixed with feelings.
 
@@ -24,7 +25,7 @@ Sound like a smart, affectionate friend who is good at organising chaos: warm, c
 
 OUTPUT
 Return JSON only with exactly: message, tasks, needsConfirmation.
-Each task must contain title, kind (fixed|flexible|self-care), priority (low|medium|high|critical), durationMinutes, and optional deadline, startsAt, category, notes, status.
+Each task must contain title, kind (fixed|flexible|self-care), priority (low|medium|high|critical), durationMinutes, and optional deadline, startsAt, category, notes.
 Do not put commentary outside the JSON.`;
 
 export async function POST(request: Request) {
@@ -53,8 +54,9 @@ export async function POST(request: Request) {
     const data = await response.json() as { content?: Array<{ type?: string; text?: string }> };
     const text = data.content?.find(part => part.type === 'text')?.text || '';
     const clean = text.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
-    const proposal = JSON.parse(clean) as YayaPlanProposal;
-    return Response.json(proposal);
+    const proposal = validateYayaProposal(JSON.parse(clean));
+    if (!proposal) return Response.json({ error: 'AI returned an invalid plan.' }, { status: 502 });
+    return Response.json(proposal satisfies YayaPlanProposal);
   } catch {
     return Response.json({ error: 'Yaya could not create a plan right now.' }, { status: 500 });
   }
