@@ -26,20 +26,24 @@
         {
           "microphonePermission": "Yaya needs your microphone so you can tell her what's on your mind.",
           "speechRecognitionPermission": "Yaya uses speech recognition to turn your words into tasks.",
-          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
         }
       ]
     ],
     "android": {
       "package": "com.yayasday.app",
       "adaptiveIcon": {
-        "backgroundColor": "#FFF9F2"
+        "backgroundColor": "#FFF9F2",
+        "foregroundImage": "./assets/icon.png"
       },
       "permissions": [
         "SCHEDULE_EXACT_ALARM",
         "POST_NOTIFICATIONS",
         "RECORD_AUDIO"
-      ]
+      ],
+      "softwareKeyboardLayoutMode": "resize"
     },
     "ios": {
       "bundleIdentifier": "com.yayasday.app",
