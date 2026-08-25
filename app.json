@@ -27,7 +27,9 @@
           "microphonePermission": "Yaya needs your microphone so you can tell her what's on your mind.",
           "speechRecognitionPermission": "Yaya uses speech recognition to turn your words into tasks.",
           "androidSpeechServicePackages": [
-            "com.google.android.googlequicksearchbox"
+            "com.google.android.googlequicksearchbox",
+            "com.google.android.tts",
+            "com.google.android.as"
           ]
         }
       ]
