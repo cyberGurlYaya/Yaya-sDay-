@@ -6,20 +6,57 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "scheme": "yaya-day",
+    "backgroundColor": "#FFF9F2",
+    "primaryColor": "#F2A7BB",
+    "icon": "./assets/icon.png",
+    "web": {
+      "output": "server",
+      "bundler": "metro"
+    },
     "plugins": [
       "expo-router",
       "expo-notifications",
-      "expo-splash-screen"
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/icon.png",
+          "backgroundColor": "#FFF9F2",
+          "imageWidth": 180,
+          "resizeMode": "contain"
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Yaya needs your microphone so you can tell her what's on your mind.",
+          "speechRecognitionPermission": "Yaya uses speech recognition to turn your words into tasks.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox",
+            "com.google.android.tts",
+            "com.google.android.as"
+          ]
+        }
+      ]
     ],
     "android": {
       "package": "com.yayasday.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#FFF9F2",
+        "foregroundImage": "./assets/icon.png"
+      },
       "permissions": [
         "SCHEDULE_EXACT_ALARM",
-        "POST_NOTIFICATIONS"
-      ]
+        "POST_NOTIFICATIONS",
+        "RECORD_AUDIO"
+      ],
+      "softwareKeyboardLayoutMode": "resize"
     },
     "ios": {
-      "bundleIdentifier": "com.yayasday.app"
+      "bundleIdentifier": "com.yayasday.app",
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "Yaya uses speech recognition to turn what you say into an organized day.",
+        "NSMicrophoneUsageDescription": "Yaya needs your microphone so you can speak your tasks instead of typing them."
+      }
     },
     "extra": {
       "router": {},

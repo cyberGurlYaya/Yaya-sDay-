@@ -5,13 +5,17 @@ import { Task } from '../types/task';
 export type Personality = 'gentle' | 'friendly' | 'firm' | 'strict';
 export type YayaProfile = {
   name: string;
+  /** Kept for backwards compatibility with existing V1 data. V1 no longer asks for a nickname. */
   nickname: string;
   personality: Personality;
   muslimMode: boolean;
+  voiceId?: string;
   onboardingComplete: boolean;
+  onboardingVersion: number;
 };
 
 const STORAGE_KEY = '@yayasday/state/v1';
+export const CURRENT_ONBOARDING_VERSION = 4;
 
 export type AppState = {
   profile: YayaProfile;
@@ -19,7 +23,7 @@ export type AppState = {
 };
 
 const defaultState: AppState = {
-  profile: { name: '', nickname: '', personality: 'friendly', muslimMode: false, onboardingComplete: false },
+  profile: { name: '', nickname: '', personality: 'friendly', muslimMode: false, voiceId: undefined, onboardingComplete: false, onboardingVersion: 0 },
   tasks: [],
 };
 
@@ -29,6 +33,7 @@ type AppStore = AppState & {
   addTask: (task: Task) => void;
   updateTask: (id: string, patch: Partial<Task>) => void;
   removeTask: (id: string) => void;
+  removeTasksBySourceMessageId: (messageId: string) => void;
   resetAll: () => void;
 };
 
@@ -41,7 +46,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then(raw => {
       if (raw) {
-        try { setState(JSON.parse(raw)); } catch { setState(defaultState); }
+        try {
+          const parsed = JSON.parse(raw) as AppState;
+          const name = parsed.profile?.name ?? '';
+          setState({
+            ...defaultState,
+            ...parsed,
+            profile: {
+              ...defaultState.profile,
+              ...(parsed.profile ?? {}),
+              nickname: name || parsed.profile?.nickname || '',
+            },
+          });
+        } catch {
+          setState(defaultState);
+        }
       }
       setHydrated(true);
     }).catch(() => setHydrated(true));
@@ -54,10 +73,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppStore>(() => ({
     ...state,
     hydrated,
-    saveProfile: patch => setState(prev => ({ ...prev, profile: { ...prev.profile, ...patch } })),
+    saveProfile: patch => setState(prev => ({
+      ...prev,
+      profile: {
+        ...prev.profile,
+        ...patch,
+        ...(patch.name !== undefined ? { nickname: patch.name } : {}),
+      },
+    })),
     addTask: task => setState(prev => ({ ...prev, tasks: [task, ...prev.tasks] })),
     updateTask: (id, patch) => setState(prev => ({ ...prev, tasks: prev.tasks.map(t => t.id === id ? { ...t, ...patch } : t) })),
     removeTask: id => setState(prev => ({ ...prev, tasks: prev.tasks.filter(t => t.id !== id) })),
+    removeTasksBySourceMessageId: messageId => setState(prev => ({ ...prev, tasks: prev.tasks.filter(t => t.sourceMessageId !== messageId) })),
     resetAll: () => setState(defaultState),
   }), [state, hydrated]);
 

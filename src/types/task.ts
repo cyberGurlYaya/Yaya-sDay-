@@ -13,4 +13,5 @@ export interface Task {
   startsAt?: string;
   category?: string;
   notes?: string;
+  sourceMessageId?: string;
 }

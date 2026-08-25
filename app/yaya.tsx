@@ -1,17 +1,332 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import * as Speech from 'expo-speech';
-import { useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../src/theme/colors';
+import { brand } from '../src/theme/brand';
 import { makeTask, useAppStore } from '../src/state/app-store';
 import { interpretWithYaya } from '../src/ai/client';
 import { scheduleTaskReminder } from '../src/notifications/local';
 import { BottomNav } from '../src/ui/bottom-nav';
 
-type Message={id:string;from:'yaya'|'user';text:string};
-export default function Yaya(){
-  const {profile,addTask}=useAppStore();const[text,setText]=useState('');const[busy,setBusy]=useState(false);const[messages,setMessages]=useState<Message[]>([{id:'welcome',from:'yaya',text:`Hey ${profile.nickname||'beautiful'} 💜 Tell me what's on your mind. You can brain-dump your whole day — I'll help make sense of it.`}]);
-  const send=async()=>{const value=text.trim();if(!value||busy)return;setBusy(true);setText('');setMessages(prev=>[...prev,{id:`${Date.now()}u`,from:'user',text:value}]);const proposal=await interpretWithYaya(value);for(const taskProposal of proposal.tasks){const task=makeTask(taskProposal.title,taskProposal);addTask(task);if(task.startsAt)await scheduleTaskReminder(task.title,new Date(task.startsAt),10);}setMessages(prev=>[...prev,{id:`${Date.now()}y`,from:'yaya',text:proposal.message}]);Speech.speak(proposal.message,{rate:.96,pitch:1.04});setBusy(false);};
-  return <SafeAreaView style={styles.page}><KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS==='ios'?'padding':undefined}><View style={styles.header}><Pressable onPress={()=>router.back()}><Text style={styles.back}>‹</Text></Pressable><View><Text style={styles.headerTitle}>Yaya 💜</Text><Text style={styles.headerSub}>Your day companion</Text></View></View><ScrollView contentContainerStyle={styles.messages}>{messages.map(m=><View key={m.id} style={[styles.bubble,m.from==='user'?styles.userBubble:styles.yayaBubble]}><View style={styles.bubbleHeader}><Text style={[styles.bubbleText,m.from==='user'&&styles.userText]}>{m.text}</Text>{m.from==='yaya'&&<Pressable onPress={()=>Speech.speak(m.text,{rate:.96,pitch:1.04})}><Text style={styles.listen}>🔊</Text></Pressable>}</View></View>)}</ScrollView><View style={styles.composer}><TextInput value={text} onChangeText={setText} placeholder="Tell Yaya what's on your mind..." placeholderTextColor={colors.mutedPlum} style={styles.input} multiline/><Pressable onPress={send} style={styles.send}>{busy?<ActivityIndicator color={colors.white}/>:<Text style={styles.sendText}>↑</Text>}</Pressable></View><BottomNav/></KeyboardAvoidingView></SafeAreaView>;
+type Message = { id: string; from: 'yaya' | 'user'; text: string; edited?: boolean };
+type DeviceVoice = { identifier: string; language: string; name: string; quality?: string };
+
+const MESSAGE_STORAGE_KEY = '@yayasday/chat/v1';
+
+function pickPreferredVoice(voices: DeviceVoice[]) {
+  const english = voices.filter(v => /^en(-|$)/i.test(v.language));
+  const score = (voice: DeviceVoice) => {
+    const text = `${voice.name} ${voice.identifier} ${voice.quality ?? ''}`.toLowerCase();
+    let value = 0;
+    if (/en-us/.test(voice.language.toLowerCase())) value += 30;
+    if (/google us english/.test(text)) value += 28;
+    if (/samantha|ava|jenny|aria|karen|moira/.test(text)) value += 24;
+    if (/female|woman/.test(text)) value += 18;
+    if (/natural|enhanced|premium|high/.test(text)) value += 16;
+    if (/novelty|robot|compact/.test(text)) value -= 12;
+    return value;
+  };
+  return [...english].sort((a, b) => score(b) - score(a))[0];
 }
-const styles=StyleSheet.create({page:{flex:1,backgroundColor:colors.cream},header:{padding:14,flexDirection:'row',alignItems:'center',borderBottomWidth:1,borderBottomColor:'#EEE6F2',backgroundColor:colors.white},back:{fontSize:34,color:colors.plum,marginRight:12},headerTitle:{fontSize:18,fontWeight:'900',color:colors.plum},headerSub:{fontSize:11,color:colors.mutedPlum,marginTop:2},messages:{padding:18,paddingBottom:24},bubble:{maxWidth:'88%',borderRadius:20,padding:14,marginBottom:10},yayaBubble:{backgroundColor:colors.white,alignSelf:'flex-start',borderTopLeftRadius:7},userBubble:{backgroundColor:colors.primary,alignSelf:'flex-end',borderTopRightRadius:7},bubbleHeader:{flexDirection:'row',alignItems:'flex-end'},bubbleText:{color:colors.plum,fontSize:15,lineHeight:22,flex:1},userText:{color:colors.white},listen:{fontSize:15,marginLeft:8},composer:{backgroundColor:colors.white,borderTopWidth:1,borderTopColor:'#EEE6F2',padding:10,flexDirection:'row',alignItems:'flex-end'},input:{flex:1,maxHeight:100,minHeight:46,borderRadius:18,backgroundColor:colors.cream,paddingHorizontal:15,paddingVertical:12,color:colors.plum,fontSize:15},send:{marginLeft:8,width:46,height:46,borderRadius:23,backgroundColor:colors.primary,alignItems:'center',justifyContent:'center'},sendText:{color:colors.white,fontSize:25,fontWeight:'900'}});
+
+function makeWelcome(name?: string): Message {
+  return {
+    id: 'welcome',
+    from: 'yaya',
+    text: `Hey ${name || 'you'} 🌸 I’m Yaya. Tell me everything that’s on your mind — messy is completely fine. I’ll help you turn it into a realistic day, not just another boring to-do list.`,
+  };
+}
+
+export default function Yaya() {
+  const { profile, tasks, addTask, removeTasksBySourceMessageId, saveProfile } = useAppStore();
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [hydratedMessages, setHydratedMessages] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [voiceId, setVoiceId] = useState<string | undefined>(profile.voiceId);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [speechAvailable, setSpeechAvailable] = useState<boolean | null>(null);
+  const transcriptRef = useRef('');
+  const submittedRef = useRef(false);
+  const editingIdRef = useRef<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => { editingIdRef.current = editingId; }, [editingId]);
+
+  useEffect(() => {
+    AsyncStorage.getItem(MESSAGE_STORAGE_KEY).then(raw => {
+      try {
+        const saved = raw ? JSON.parse(raw) as Message[] : [];
+        setMessages(Array.isArray(saved) && saved.length ? saved : [makeWelcome(profile.name)]);
+      } catch {
+        setMessages([makeWelcome(profile.name)]);
+      }
+      setHydratedMessages(true);
+    }).catch(() => {
+      setMessages([makeWelcome(profile.name)]);
+      setHydratedMessages(true);
+    });
+  }, [profile.name]);
+
+  useEffect(() => {
+    if (hydratedMessages) AsyncStorage.setItem(MESSAGE_STORAGE_KEY, JSON.stringify(messages.slice(-80))).catch(() => undefined);
+  }, [messages, hydratedMessages]);
+
+  useEffect(() => {
+    Speech.getAvailableVoicesAsync().then(voices => {
+      const selected = profile.voiceId ? voices.find(v => v.identifier === profile.voiceId) : undefined;
+      const preferred = selected || pickPreferredVoice(voices as DeviceVoice[]);
+      if (preferred) {
+        setVoiceId(preferred.identifier);
+        if (!profile.voiceId) saveProfile({ voiceId: preferred.identifier });
+      }
+    }).catch(() => undefined);
+  }, [profile.voiceId, saveProfile]);
+
+  const speak = (value: string) => {
+    Speech.stop();
+    Speech.speak(value, { language: 'en-US', rate: 0.91, pitch: 1.03, volume: 1, voice: voiceId });
+  };
+
+  const scrollToLatest = (animated = true) => {
+    const scroll = () => scrollRef.current?.scrollToEnd({ animated });
+    requestAnimationFrame(scroll);
+    setTimeout(scroll, 70);
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 180);
+  };
+
+  useEffect(() => { if (messages.length) scrollToLatest(false); }, [messages.length]);
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => scrollToLatest(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => scrollToLatest(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+
+  const submit = async (value: string, existingMessageId?: string) => {
+    const clean = value.trim();
+    if (!clean || busy) return;
+
+    const messageId = existingMessageId || `${Date.now()}u`;
+    setBusy(true);
+    setText('');
+    setEditingId(null);
+
+    if (existingMessageId) {
+      setMessages(prev => prev.map(message => message.id === existingMessageId ? { ...message, text: clean, edited: true } : message));
+      removeTasksBySourceMessageId(existingMessageId);
+    } else {
+      setMessages(prev => [...prev, { id: messageId, from: 'user', text: clean }]);
+    }
+    scrollToLatest();
+
+    try {
+      const proposal = await interpretWithYaya(clean, {
+        nickname: profile.name,
+        personality: profile.personality,
+        muslimMode: profile.muslimMode,
+        currentTasks: tasks.map(task => ({ title: task.title, status: task.status, kind: task.kind, priority: task.priority })),
+      });
+
+      for (const taskProposal of proposal.tasks) {
+        const task = makeTask(taskProposal.title, { ...taskProposal, sourceMessageId: messageId });
+        addTask(task);
+        if (task.startsAt) await scheduleTaskReminder(task.title, new Date(task.startsAt), 10);
+      }
+
+      const responseText = existingMessageId
+        ? `Updated. I re-read what you meant and adjusted the tasks from that message. ${proposal.message}`
+        : proposal.message;
+      setMessages(prev => [...prev, { id: `${Date.now()}y`, from: 'yaya', text: responseText }]);
+      scrollToLatest();
+      speak(responseText);
+    } catch {
+      const fallback = 'I couldn’t organize that right now. Your message is still here — please try again in a moment. 💜';
+      setMessages(prev => [...prev, { id: `${Date.now()}e`, from: 'yaya', text: fallback }]);
+      scrollToLatest();
+      speak(fallback);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const beginEdit = (message: Message) => {
+    if (busy) return;
+    setEditingId(message.id);
+    setText(message.text);
+    setTimeout(() => scrollToLatest(true), 80);
+  };
+
+  const cancelEdit = () => { setEditingId(null); setText(''); };
+
+  useSpeechRecognitionEvent('start', () => {
+    setListening(true);
+    submittedRef.current = false;
+  });
+
+  useSpeechRecognitionEvent('result', event => {
+    const transcript = event.results?.[0]?.transcript || '';
+    if (!transcript) return;
+    transcriptRef.current = transcript;
+    setText(transcript);
+    scrollToLatest();
+    if (event.isFinal && !submittedRef.current) {
+      submittedRef.current = true;
+      ExpoSpeechRecognitionModule.stop();
+      void submit(transcript, editingIdRef.current || undefined);
+    }
+  });
+
+  useSpeechRecognitionEvent('end', () => {
+    setListening(false);
+    const transcript = transcriptRef.current.trim();
+    if (transcript && !submittedRef.current) {
+      submittedRef.current = true;
+      void submit(transcript, editingIdRef.current || undefined);
+    }
+  });
+
+  useSpeechRecognitionEvent('error', event => {
+    setListening(false);
+    if (event.error !== 'aborted') {
+      const detail = event.message ? ` ${event.message}` : '';
+      setMessages(prev => [...prev, {
+        id: `${Date.now()}e`,
+        from: 'yaya',
+        text: `I couldn’t start listening.${detail} Please check that microphone access and a speech-recognition service are enabled on your phone. 🎙️`,
+      }]);
+      scrollToLatest();
+    }
+  });
+
+  const toggleListening = async () => {
+    if (listening) {
+      ExpoSpeechRecognitionModule.stop();
+      return;
+    }
+
+    try {
+      const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!permission.granted) {
+        setMessages(prev => [...prev, { id: `${Date.now()}e`, from: 'yaya', text: 'I need microphone permission before I can listen to you. Please allow microphone access for Yaya’sDay in your phone settings. 💜' }]);
+        scrollToLatest();
+        return;
+      }
+
+      const available = ExpoSpeechRecognitionModule.isRecognitionAvailable();
+      setSpeechAvailable(available);
+      if (!available) {
+        setMessages(prev => [...prev, { id: `${Date.now()}e`, from: 'yaya', text: Platform.OS === 'android'
+          ? 'Your phone does not currently have a speech-recognition service available. Please make sure Google speech recognition / Google app services are enabled, then try again. 🎙️'
+          : 'Speech recognition is not available on this device right now. Please enable Siri & Dictation, then try again. 🎙️' }]);
+        scrollToLatest();
+        return;
+      }
+
+      const defaultService = Platform.OS === 'android'
+        ? ExpoSpeechRecognitionModule.getDefaultRecognitionService()?.packageName
+        : undefined;
+
+      transcriptRef.current = '';
+      setText('');
+      submittedRef.current = false;
+
+      ExpoSpeechRecognitionModule.start({
+        lang: 'en-US',
+        interimResults: true,
+        maxAlternatives: 1,
+        continuous: false,
+        requiresOnDeviceRecognition: false,
+        ...(defaultService ? { androidRecognitionServicePackage: defaultService } : {}),
+        contextualStrings: ['Yaya', 'Yaya’sDay', 'to-do', 'task', 'schedule'],
+      });
+    } catch {
+      setListening(false);
+      setMessages(prev => [...prev, { id: `${Date.now()}e`, from: 'yaya', text: 'Something stopped me from opening the microphone. Please try again after checking your microphone and speech settings. 🎙️' }]);
+      scrollToLatest();
+    }
+  };
+
+  const contentWidth = Math.min(width - 32, 720);
+  const editing = editingId !== null;
+
+  return <View style={[styles.page, { paddingTop: insets.top }]}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 4 : 0}>
+      <View style={[styles.shell, { width: contentWidth, alignSelf: 'center' }]}>
+        <View style={styles.header}>
+          <Pressable onPress={() => router.back()} style={styles.backButton}><Text style={styles.back}>‹</Text></Pressable>
+          <View style={styles.brandRow}>
+            <View style={styles.avatar}><Text style={styles.avatarText}>{brand.avatar.initials}</Text></View>
+            <View><Text style={styles.headerTitle}>Yaya</Text><Text style={styles.headerSub}>{listening ? 'I’m listening…' : editing ? 'Editing your message…' : 'Your gentle day companion'}</Text></View>
+          </View>
+          <View style={{ width: 42 }} />
+        </View>
+
+        <ScrollView ref={scrollRef} style={styles.scroll} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" scrollEventThrottle={16} keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} onContentSizeChange={() => scrollToLatest(false)}>
+          <View style={styles.brandIntro}>
+            <View style={styles.flowerMark}><Text style={styles.flower}>🌸</Text></View>
+            <Text style={styles.brandName}>{brand.name}</Text>
+            <Text style={styles.brandTagline}>{brand.tagline}</Text>
+          </View>
+
+          {messages.map(message => <View key={message.id} style={[styles.bubble, message.from === 'user' ? styles.userBubble : styles.yayaBubble]}>
+            <View style={styles.bubbleHeader}>
+              <Text style={[styles.bubbleText, message.from === 'user' && styles.userText]}>{message.text}</Text>
+              {message.from === 'yaya' && <Pressable onPress={() => speak(message.text)} hitSlop={8}><Text style={styles.listen}>🔊</Text></Pressable>}
+            </View>
+            {message.from === 'user' && message.id !== 'welcome' && <View style={styles.userActions}>
+              {message.edited && <Text style={styles.editedLabel}>edited</Text>}
+              <Pressable onPress={() => beginEdit(message)} disabled={busy}><Text style={styles.editButton}>Edit</Text></Pressable>
+            </View>}
+          </View>)}
+
+          {listening && <View style={styles.listeningCard}><View style={styles.pulse}><Text style={styles.mic}>🎙️</Text></View><View style={{ flex: 1 }}><Text style={styles.listeningTitle}>Yaya is listening</Text><Text style={styles.listeningCopy}>Say your tasks naturally. You do not have to format them.</Text></View></View>}
+          {speechAvailable === false && <Text style={styles.speechHint}>Speech recognition is currently unavailable on this device.</Text>}
+        </ScrollView>
+
+        {editing && <View style={styles.editBanner}><Text style={styles.editBannerText}>Editing this message — Yaya will re-process it when you save.</Text><Pressable onPress={cancelEdit}><Text style={styles.cancelEdit}>Cancel</Text></Pressable></View>}
+
+        <View style={styles.composer}>
+          <TextInput
+            value={text}
+            onChangeText={setText}
+            placeholder={editing ? 'Change what you meant…' : 'Say it or type it…'}
+            placeholderTextColor={colors.mutedPlum}
+            style={styles.input}
+            multiline
+            scrollEnabled
+            maxLength={1200}
+            blurOnSubmit={false}
+            returnKeyType="default"
+            onFocus={() => setTimeout(() => scrollToLatest(true), 80)}
+          />
+          {!editing && <Pressable onPress={toggleListening} disabled={busy} style={[styles.micButton, listening && styles.micButtonActive]}><Text style={styles.micButtonText}>{listening ? '■' : '🎙️'}</Text></Pressable>}
+          <Pressable onPress={() => void submit(text, editingId || undefined)} disabled={busy || !text.trim()} style={[styles.send, !text.trim() && styles.sendDisabled]}>{busy ? <ActivityIndicator color={colors.white} /> : <Text style={styles.sendText}>{editing ? '✓' : '↑'}</Text>}</Pressable>
+        </View>
+        <Text style={styles.helper}>{editing ? 'Save to let Yaya rethink the tasks from this message.' : listening ? 'Tap ■ when you’re done, or let Yaya catch the final sentence.' : 'Tap the microphone first — typing is only the backup.'}</Text>
+      </View>
+      <BottomNav />
+    </KeyboardAvoidingView>
+  </View>;
+}
+
+const styles = StyleSheet.create({
+  page: { flex: 1, backgroundColor: colors.cream }, shell: { flex: 1, backgroundColor: colors.cream },
+  header: { minHeight: 66, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#EEE6F2', backgroundColor: colors.white },
+  backButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' }, back: { fontSize: 34, color: colors.plum },
+  brandRow: { flexDirection: 'row', alignItems: 'center', flex: 1, justifyContent: 'center' }, avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginRight: 9 }, avatarText: { color: colors.white, fontWeight: '900', fontSize: 19 },
+  headerTitle: { fontSize: 18, fontWeight: '900', color: colors.plum }, headerSub: { fontSize: 11, color: colors.mutedPlum, marginTop: 2 }, scroll: { flex: 1 }, messages: { padding: 16, paddingBottom: 120 },
+  brandIntro: { alignItems: 'center', paddingVertical: 12 }, flowerMark: { width: 60, height: 60, borderRadius: 30, backgroundColor: colors.softPink, alignItems: 'center', justifyContent: 'center' }, flower: { fontSize: 31 }, brandName: { fontSize: 20, fontWeight: '900', color: colors.plum, marginTop: 8 }, brandTagline: { fontSize: 12, color: colors.mutedPlum, marginTop: 2 },
+  bubble: { maxWidth: '92%', borderRadius: 20, padding: 14, marginBottom: 10 }, yayaBubble: { backgroundColor: colors.white, alignSelf: 'flex-start', borderTopLeftRadius: 7 }, userBubble: { backgroundColor: colors.primary, alignSelf: 'flex-end', borderTopRightRadius: 7 }, bubbleHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 }, bubbleText: { flex: 1, color: colors.plum, fontSize: 15, lineHeight: 22 }, userText: { color: colors.white }, listen: { fontSize: 16 }, userActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginTop: 8 }, editedLabel: { color: 'rgba(255,255,255,0.75)', fontSize: 11 }, editButton: { color: colors.white, fontWeight: '800', fontSize: 12 },
+  listeningCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFF0F6', borderRadius: 18, padding: 14, marginTop: 4 }, pulse: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' }, mic: { fontSize: 22 }, listeningTitle: { color: colors.plum, fontWeight: '900', fontSize: 14 }, listeningCopy: { color: colors.mutedPlum, fontSize: 12, lineHeight: 17, marginTop: 2 }, speechHint: { color: colors.mutedPlum, textAlign: 'center', fontSize: 11, marginTop: 8 },
+  editBanner: { marginHorizontal: 12, marginBottom: 7, backgroundColor: '#F5F0FC', borderRadius: 14, padding: 10, flexDirection: 'row', alignItems: 'center', gap: 10 }, editBannerText: { flex: 1, color: colors.plum, fontSize: 12 }, cancelEdit: { color: colors.primary, fontWeight: '800', fontSize: 12 },
+  composer: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, padding: 10, backgroundColor: colors.white, borderTopWidth: 1, borderTopColor: '#EEE6F2' }, input: { flex: 1, minHeight: 48, maxHeight: 130, backgroundColor: colors.cream, borderRadius: 18, paddingHorizontal: 15, paddingVertical: 12, color: colors.plum, fontSize: 15, lineHeight: 21 },
+  micButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#F5F0FC', alignItems: 'center', justifyContent: 'center' }, micButtonActive: { backgroundColor: colors.softPink }, micButtonText: { fontSize: 20 }, send: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }, sendDisabled: { opacity: 0.45 }, sendText: { color: colors.white, fontSize: 24, fontWeight: '900' }, helper: { color: colors.mutedPlum, fontSize: 10, textAlign: 'center', paddingVertical: 5, paddingHorizontal: 12 },
+});
