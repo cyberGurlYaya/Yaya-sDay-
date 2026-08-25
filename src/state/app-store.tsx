@@ -5,6 +5,7 @@ import { Task } from '../types/task';
 export type Personality = 'gentle' | 'friendly' | 'firm' | 'strict';
 export type YayaProfile = {
   name: string;
+  /** Kept for backwards compatibility with existing V1 data. V1 no longer asks for a nickname. */
   nickname: string;
   personality: Personality;
   muslimMode: boolean;
@@ -14,7 +15,7 @@ export type YayaProfile = {
 };
 
 const STORAGE_KEY = '@yayasday/state/v1';
-export const CURRENT_ONBOARDING_VERSION = 3;
+export const CURRENT_ONBOARDING_VERSION = 4;
 
 export type AppState = {
   profile: YayaProfile;
@@ -47,12 +48,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (raw) {
         try {
           const parsed = JSON.parse(raw) as AppState;
+          const name = parsed.profile?.name ?? '';
           setState({
             ...defaultState,
             ...parsed,
-            profile: { ...defaultState.profile, ...(parsed.profile ?? {}) },
+            profile: {
+              ...defaultState.profile,
+              ...(parsed.profile ?? {}),
+              nickname: name || parsed.profile?.nickname || '',
+            },
           });
-        } catch { setState(defaultState); }
+        } catch {
+          setState(defaultState);
+        }
       }
       setHydrated(true);
     }).catch(() => setHydrated(true));
@@ -65,7 +73,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppStore>(() => ({
     ...state,
     hydrated,
-    saveProfile: patch => setState(prev => ({ ...prev, profile: { ...prev.profile, ...patch } })),
+    saveProfile: patch => setState(prev => ({
+      ...prev,
+      profile: {
+        ...prev.profile,
+        ...patch,
+        ...(patch.name !== undefined ? { nickname: patch.name } : {}),
+      },
+    })),
     addTask: task => setState(prev => ({ ...prev, tasks: [task, ...prev.tasks] })),
     updateTask: (id, patch) => setState(prev => ({ ...prev, tasks: prev.tasks.map(t => t.id === id ? { ...t, ...patch } : t) })),
     removeTask: id => setState(prev => ({ ...prev, tasks: prev.tasks.filter(t => t.id !== id) })),
