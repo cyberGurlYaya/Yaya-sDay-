@@ -39,6 +39,8 @@ function offlineProposal(input: string, context: YayaContext): YayaPlanProposal 
     };
   }
 
+  // Conservative fallback: punctuation is NOT a task boundary. If the AI service
+  // is unavailable, prefer one faithful capture over inventing several tasks.
   const tasks = parseNaturalTaskText(input).map(task => ({
     title: task.title || input,
     kind: task.kind || 'flexible',
@@ -53,7 +55,7 @@ function offlineProposal(input: string, context: YayaContext): YayaPlanProposal 
 
   if (!tasks.length) {
     return {
-      message: `I'm listening${context.nickname ? ` ${context.nickname}` : ''}. Tell me what you want to get done, even if it comes out as one messy sentence. 🌸`,
+      message: `I'm listening${context.nickname ? `, ${context.nickname}` : ''}. Tell me what you want to get done, even if it comes out as one messy sentence. 🌸`,
       tasks: [],
       needsConfirmation: false,
     };
@@ -61,18 +63,18 @@ function offlineProposal(input: string, context: YayaContext): YayaPlanProposal 
 
   const selfCareCount = tasks.filter(task => task.kind === 'self-care').length;
   const fixedCount = tasks.filter(task => task.kind === 'fixed').length;
-  let message: string;
-  if (tasks.length === 1) {
-    message = `Got it. I heard “${tasks[0].title}”. I'll keep it realistic instead of just dumping it into a list. 🌸`;
-  } else {
-    const protections = [
-      fixedCount ? 'protecting the things with fixed times' : '',
-      selfCareCount ? 'keeping your rest and self-care in the day' : 'leaving breathing room between bigger tasks',
-    ].filter(Boolean).join(' and ');
-    message = `I caught ${tasks.length} things. I’ll turn them into a doable day, ${protections || 'without cramming everything together'}.`;
-  }
+  const protections = [
+    fixedCount ? 'protecting anything with a real fixed time' : '',
+    selfCareCount ? 'keeping rest and self-care in the day' : 'leaving breathing room between bigger tasks',
+  ].filter(Boolean).join(' and ');
 
-  return { message, tasks, needsConfirmation: false };
+  return {
+    message: tasks.length === 1
+      ? `Got it. I captured that as one thing for now rather than guessing where your thoughts should be split. 🌸`
+      : `I caught ${tasks.length} clear action groups. I’ll keep the day realistic, ${protections || 'without cramming everything together'}.`,
+    tasks,
+    needsConfirmation: false,
+  };
 }
 
 export async function interpretWithYaya(input: string, context: YayaContext = {}): Promise<YayaPlanProposal> {
@@ -91,7 +93,7 @@ export async function interpretWithYaya(input: string, context: YayaContext = {}
         if (isValidProposal(payload)) return payload;
       }
     } catch {
-      // The local planner below is intentionally kept as an offline safety net.
+      // Keep the local safety net; it must never invent task boundaries.
     }
   }
 
