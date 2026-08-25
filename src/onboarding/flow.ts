@@ -1,7 +1,6 @@
 export const onboardingSteps = [
   'welcome',
   'name',
-  'nickname',
   'personality',
   'muslim-mode',
   'complete',
