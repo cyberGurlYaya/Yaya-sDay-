@@ -9,6 +9,10 @@
     "backgroundColor": "#FFF9F2",
     "primaryColor": "#F2A7BB",
     "icon": "./assets/icon.png",
+    "web": {
+      "output": "server",
+      "bundler": "metro"
+    },
     "plugins": [
       "expo-router",
       "expo-notifications",
