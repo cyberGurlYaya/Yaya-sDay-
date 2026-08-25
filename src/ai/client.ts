@@ -15,10 +15,9 @@ function isValidProposal(value: unknown): value is YayaPlanProposal {
     && Array.isArray(proposal.tasks)
     && typeof proposal.needsConfirmation === 'boolean'
     && proposal.tasks.every(task =>
-      task &&
-      typeof task.title === 'string' &&
-      ['fixed', 'flexible', 'self-care'].includes(task.kind as string) &&
-      ['low', 'medium', 'high', 'critical'].includes(task.priority as string)
+      task && typeof task.title === 'string'
+        && ['fixed', 'flexible', 'self-care'].includes(task.kind as string)
+        && ['low', 'medium', 'high', 'critical'].includes(task.priority as string)
     );
 }
 
@@ -39,8 +38,6 @@ function offlineProposal(input: string, context: YayaContext): YayaPlanProposal 
     };
   }
 
-  // Conservative fallback: punctuation is NOT a task boundary. If the AI service
-  // is unavailable, prefer one faithful capture over inventing several tasks.
   const tasks = parseNaturalTaskText(input).map(task => ({
     title: task.title || input,
     kind: task.kind || 'flexible',
@@ -70,7 +67,7 @@ function offlineProposal(input: string, context: YayaContext): YayaPlanProposal 
 
   return {
     message: tasks.length === 1
-      ? `Got it. I captured that as one thing for now rather than guessing where your thoughts should be split. 🌸`
+      ? 'Got it. I captured that as one thing for now rather than guessing where your thoughts should be split. 🌸'
       : `I caught ${tasks.length} clear action groups. I’ll keep the day realistic, ${protections || 'without cramming everything together'}.`,
     tasks,
     needsConfirmation: false,
@@ -79,22 +76,25 @@ function offlineProposal(input: string, context: YayaContext): YayaPlanProposal 
 
 export async function interpretWithYaya(input: string, context: YayaContext = {}): Promise<YayaPlanProposal> {
   const cleanInput = input.trim();
-  const baseUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
+  if (!cleanInput) return offlineProposal('', context);
 
-  if (baseUrl && cleanInput) {
-    try {
-      const response = await fetch(`${baseUrl.replace(/\/$/, '')}/api/plan`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ input: cleanInput, context }),
-      });
-      if (response.ok) {
-        const payload: unknown = await response.json();
-        if (isValidProposal(payload)) return payload;
-      }
-    } catch {
-      // Keep the local safety net; it must never invent task boundaries.
+  const configuredBaseUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
+  const endpoint = configuredBaseUrl
+    ? `${configuredBaseUrl.replace(/\/$/, '')}/api/plan`
+    : '/api/plan';
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ input: cleanInput, context }),
+    });
+    if (response.ok) {
+      const payload: unknown = await response.json();
+      if (isValidProposal(payload)) return payload;
     }
+  } catch {
+    // Keep the local safety net; it must never invent task boundaries.
   }
 
   return offlineProposal(cleanInput, context);
