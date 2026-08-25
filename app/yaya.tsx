@@ -33,11 +33,11 @@ function pickPreferredVoice(voices: DeviceVoice[]) {
   return [...english].sort((a, b) => score(b) - score(a))[0];
 }
 
-function makeWelcome(nickname?: string): Message {
+function makeWelcome(name?: string): Message {
   return {
     id: 'welcome',
     from: 'yaya',
-    text: `Hey ${nickname || 'you'} 🌸 I’m Yaya. Tell me everything that’s on your mind — messy is completely fine. I’ll help you turn it into a realistic day, not just another boring to-do list.`,
+    text: `Hey ${name || 'you'} 🌸 I’m Yaya. Tell me everything that’s on your mind — messy is completely fine. I’ll help you turn it into a realistic day, not just another boring to-do list.`,
   };
 }
 
@@ -52,29 +52,31 @@ export default function Yaya() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [voiceId, setVoiceId] = useState<string | undefined>(profile.voiceId);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [speechAvailable, setSpeechAvailable] = useState<boolean | null>(null);
   const transcriptRef = useRef('');
   const submittedRef = useRef(false);
+  const editingIdRef = useRef<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => { editingIdRef.current = editingId; }, [editingId]);
 
   useEffect(() => {
     AsyncStorage.getItem(MESSAGE_STORAGE_KEY).then(raw => {
       try {
         const saved = raw ? JSON.parse(raw) as Message[] : [];
-        setMessages(Array.isArray(saved) && saved.length ? saved : [makeWelcome(profile.nickname)]);
+        setMessages(Array.isArray(saved) && saved.length ? saved : [makeWelcome(profile.name)]);
       } catch {
-        setMessages([makeWelcome(profile.nickname)]);
+        setMessages([makeWelcome(profile.name)]);
       }
       setHydratedMessages(true);
     }).catch(() => {
-      setMessages([makeWelcome(profile.nickname)]);
+      setMessages([makeWelcome(profile.name)]);
       setHydratedMessages(true);
     });
-  }, [profile.nickname]);
+  }, [profile.name]);
 
   useEffect(() => {
-    if (hydratedMessages) {
-      AsyncStorage.setItem(MESSAGE_STORAGE_KEY, JSON.stringify(messages.slice(-80))).catch(() => undefined);
-    }
+    if (hydratedMessages) AsyncStorage.setItem(MESSAGE_STORAGE_KEY, JSON.stringify(messages.slice(-80))).catch(() => undefined);
   }, [messages, hydratedMessages]);
 
   useEffect(() => {
@@ -100,17 +102,12 @@ export default function Yaya() {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 180);
   };
 
-  useEffect(() => {
-    if (messages.length) scrollToLatest(false);
-  }, [messages.length]);
+  useEffect(() => { if (messages.length) scrollToLatest(false); }, [messages.length]);
 
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', () => scrollToLatest(true));
     const hide = Keyboard.addListener('keyboardDidHide', () => scrollToLatest(false));
-    return () => {
-      show.remove();
-      hide.remove();
-    };
+    return () => { show.remove(); hide.remove(); };
   }, []);
 
   const submit = async (value: string, existingMessageId?: string) => {
@@ -132,7 +129,7 @@ export default function Yaya() {
 
     try {
       const proposal = await interpretWithYaya(clean, {
-        nickname: profile.nickname,
+        nickname: profile.name,
         personality: profile.personality,
         muslimMode: profile.muslimMode,
         currentTasks: tasks.map(task => ({ title: task.title, status: task.status, kind: task.kind, priority: task.priority })),
@@ -167,12 +164,13 @@ export default function Yaya() {
     setTimeout(() => scrollToLatest(true), 80);
   };
 
-  const cancelEdit = () => {
-    setEditingId(null);
-    setText('');
-  };
+  const cancelEdit = () => { setEditingId(null); setText(''); };
 
-  useSpeechRecognitionEvent('start', () => { setListening(true); submittedRef.current = false; });
+  useSpeechRecognitionEvent('start', () => {
+    setListening(true);
+    submittedRef.current = false;
+  });
+
   useSpeechRecognitionEvent('result', event => {
     const transcript = event.results?.[0]?.transcript || '';
     if (!transcript) return;
@@ -182,38 +180,85 @@ export default function Yaya() {
     if (event.isFinal && !submittedRef.current) {
       submittedRef.current = true;
       ExpoSpeechRecognitionModule.stop();
-      void submit(transcript, editingId || undefined);
+      void submit(transcript, editingIdRef.current || undefined);
     }
   });
-  useSpeechRecognitionEvent('end', () => setListening(false));
+
+  useSpeechRecognitionEvent('end', () => {
+    setListening(false);
+    const transcript = transcriptRef.current.trim();
+    if (transcript && !submittedRef.current) {
+      submittedRef.current = true;
+      void submit(transcript, editingIdRef.current || undefined);
+    }
+  });
+
   useSpeechRecognitionEvent('error', event => {
     setListening(false);
     if (event.error !== 'aborted') {
-      setMessages(prev => [...prev, { id: `${Date.now()}e`, from: 'yaya', text: 'I couldn’t hear you clearly. Tap the microphone and try again. 🎙️' }]);
+      const detail = event.message ? ` ${event.message}` : '';
+      setMessages(prev => [...prev, {
+        id: `${Date.now()}e`,
+        from: 'yaya',
+        text: `I couldn’t start listening.${detail} Please check that microphone access and a speech-recognition service are enabled on your phone. 🎙️`,
+      }]);
+      scrollToLatest();
     }
   });
 
   const toggleListening = async () => {
-    if (listening) { ExpoSpeechRecognitionModule.stop(); return; }
-    const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-    if (!permission.granted) {
-      setMessages(prev => [...prev, { id: `${Date.now()}e`, from: 'yaya', text: 'I need microphone and speech-recognition permission before I can listen to you. 💜' }]);
+    if (listening) {
+      ExpoSpeechRecognitionModule.stop();
       return;
     }
-    transcriptRef.current = '';
-    setText('');
-    ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true, maxAlternatives: 1, continuous: false, addsPunctuation: true, contextualStrings: ['Yaya', 'Yaya’sDay', 'to-do', 'task', 'schedule'] });
+
+    try {
+      const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!permission.granted) {
+        setMessages(prev => [...prev, { id: `${Date.now()}e`, from: 'yaya', text: 'I need microphone permission before I can listen to you. Please allow microphone access for Yaya’sDay in your phone settings. 💜' }]);
+        scrollToLatest();
+        return;
+      }
+
+      const available = ExpoSpeechRecognitionModule.isRecognitionAvailable();
+      setSpeechAvailable(available);
+      if (!available) {
+        setMessages(prev => [...prev, { id: `${Date.now()}e`, from: 'yaya', text: Platform.OS === 'android'
+          ? 'Your phone does not currently have a speech-recognition service available. Please make sure Google speech recognition / Google app services are enabled, then try again. 🎙️'
+          : 'Speech recognition is not available on this device right now. Please enable Siri & Dictation, then try again. 🎙️' }]);
+        scrollToLatest();
+        return;
+      }
+
+      const defaultService = Platform.OS === 'android'
+        ? ExpoSpeechRecognitionModule.getDefaultRecognitionService()?.packageName
+        : undefined;
+
+      transcriptRef.current = '';
+      setText('');
+      submittedRef.current = false;
+
+      ExpoSpeechRecognitionModule.start({
+        lang: 'en-US',
+        interimResults: true,
+        maxAlternatives: 1,
+        continuous: false,
+        requiresOnDeviceRecognition: false,
+        ...(defaultService ? { androidRecognitionServicePackage: defaultService } : {}),
+        contextualStrings: ['Yaya', 'Yaya’sDay', 'to-do', 'task', 'schedule'],
+      });
+    } catch {
+      setListening(false);
+      setMessages(prev => [...prev, { id: `${Date.now()}e`, from: 'yaya', text: 'Something stopped me from opening the microphone. Please try again after checking your microphone and speech settings. 🎙️' }]);
+      scrollToLatest();
+    }
   };
 
   const contentWidth = Math.min(width - 32, 720);
   const editing = editingId !== null;
 
   return <View style={[styles.page, { paddingTop: insets.top }]}>
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 4 : 0}
-    >
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 4 : 0}>
       <View style={[styles.shell, { width: contentWidth, alignSelf: 'center' }]}>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={styles.backButton}><Text style={styles.back}>‹</Text></Pressable>
@@ -224,15 +269,7 @@ export default function Yaya() {
           <View style={{ width: 42 }} />
         </View>
 
-        <ScrollView
-          ref={scrollRef}
-          style={styles.scroll}
-          contentContainerStyle={styles.messages}
-          keyboardShouldPersistTaps="handled"
-          scrollEventThrottle={16}
-          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-          onContentSizeChange={() => scrollToLatest(false)}
-        >
+        <ScrollView ref={scrollRef} style={styles.scroll} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled" scrollEventThrottle={16} keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} onContentSizeChange={() => scrollToLatest(false)}>
           <View style={styles.brandIntro}>
             <View style={styles.flowerMark}><Text style={styles.flower}>🌸</Text></View>
             <Text style={styles.brandName}>{brand.name}</Text>
@@ -250,13 +287,12 @@ export default function Yaya() {
             </View>}
           </View>)}
 
-          {listening && <View style={styles.listeningCard}>
-            <View style={styles.pulse}><Text style={styles.mic}>🎙️</Text></View>
-            <View><Text style={styles.listeningTitle}>Yaya is listening</Text><Text style={styles.listeningCopy}>Say your tasks naturally. You don’t have to format them.</Text></View>
-          </View>}
+          {listening && <View style={styles.listeningCard}><View style={styles.pulse}><Text style={styles.mic}>🎙️</Text></View><View style={{ flex: 1 }}><Text style={styles.listeningTitle}>Yaya is listening</Text><Text style={styles.listeningCopy}>Say your tasks naturally. You do not have to format them.</Text></View></View>}
+          {speechAvailable === false && <Text style={styles.speechHint}>Speech recognition is currently unavailable on this device.</Text>}
         </ScrollView>
 
         {editing && <View style={styles.editBanner}><Text style={styles.editBannerText}>Editing this message — Yaya will re-process it when you save.</Text><Pressable onPress={cancelEdit}><Text style={styles.cancelEdit}>Cancel</Text></Pressable></View>}
+
         <View style={styles.composer}>
           <TextInput
             value={text}
@@ -266,14 +302,13 @@ export default function Yaya() {
             style={styles.input}
             multiline
             scrollEnabled
+            maxLength={1200}
             blurOnSubmit={false}
             returnKeyType="default"
             onFocus={() => setTimeout(() => scrollToLatest(true), 80)}
           />
           {!editing && <Pressable onPress={toggleListening} disabled={busy} style={[styles.micButton, listening && styles.micButtonActive]}><Text style={styles.micButtonText}>{listening ? '■' : '🎙️'}</Text></Pressable>}
-          <Pressable onPress={() => void submit(text, editingId || undefined)} disabled={busy || !text.trim()} style={[styles.send, !text.trim() && styles.sendDisabled]}>
-            {busy ? <ActivityIndicator color={colors.white} /> : <Text style={styles.sendText}>{editing ? '✓' : '↑'}</Text>}
-          </Pressable>
+          <Pressable onPress={() => void submit(text, editingId || undefined)} disabled={busy || !text.trim()} style={[styles.send, !text.trim() && styles.sendDisabled]}>{busy ? <ActivityIndicator color={colors.white} /> : <Text style={styles.sendText}>{editing ? '✓' : '↑'}</Text>}</Pressable>
         </View>
         <Text style={styles.helper}>{editing ? 'Save to let Yaya rethink the tasks from this message.' : listening ? 'Tap ■ when you’re done, or let Yaya catch the final sentence.' : 'Tap the microphone first — typing is only the backup.'}</Text>
       </View>
@@ -283,48 +318,15 @@ export default function Yaya() {
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: colors.cream },
-  shell: { flex: 1, backgroundColor: colors.cream },
+  page: { flex: 1, backgroundColor: colors.cream }, shell: { flex: 1, backgroundColor: colors.cream },
   header: { minHeight: 66, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#EEE6F2', backgroundColor: colors.white },
-  backButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
-  back: { fontSize: 34, color: colors.plum },
-  brandRow: { flexDirection: 'row', alignItems: 'center', flex: 1, justifyContent: 'center' },
-  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginRight: 9 },
-  avatarText: { color: colors.white, fontWeight: '900', fontSize: 19 },
-  headerTitle: { fontSize: 18, fontWeight: '900', color: colors.plum },
-  headerSub: { fontSize: 11, color: colors.mutedPlum, marginTop: 2 },
-  scroll: { flex: 1 },
-  messages: { padding: 16, paddingBottom: 120 },
-  brandIntro: { alignItems: 'center', paddingVertical: 12 },
-  flowerMark: { width: 60, height: 60, borderRadius: 30, backgroundColor: colors.softPink, alignItems: 'center', justifyContent: 'center' },
-  flower: { fontSize: 31 },
-  brandName: { fontSize: 20, fontWeight: '900', color: colors.plum, marginTop: 8 },
-  brandTagline: { fontSize: 12, color: colors.mutedPlum, marginTop: 2 },
-  bubble: { maxWidth: '88%', borderRadius: 20, padding: 14, marginBottom: 10 },
-  yayaBubble: { backgroundColor: colors.white, alignSelf: 'flex-start', borderTopLeftRadius: 7 },
-  userBubble: { backgroundColor: colors.primary, alignSelf: 'flex-end', borderTopRightRadius: 7 },
-  bubbleHeader: { flexDirection: 'row', alignItems: 'flex-end' },
-  bubbleText: { color: colors.plum, fontSize: 15, lineHeight: 22, flex: 1 },
-  userText: { color: colors.white },
-  listen: { fontSize: 15, marginLeft: 8 },
-  userActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 7, gap: 9 },
-  editedLabel: { color: 'rgba(255,255,255,0.72)', fontSize: 10 },
-  editButton: { color: colors.white, fontSize: 11, fontWeight: '900', textDecorationLine: 'underline' },
-  listeningCard: { backgroundColor: '#F2EDF9', borderRadius: 20, padding: 14, flexDirection: 'row', alignItems: 'center', marginTop: 4 },
-  pulse: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.babyPink, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  mic: { fontSize: 22 },
-  listeningTitle: { color: colors.plum, fontSize: 14, fontWeight: '900' },
-  listeningCopy: { color: colors.mutedPlum, fontSize: 12, marginTop: 3, maxWidth: 250, lineHeight: 17 },
-  editBanner: { backgroundColor: '#F5F0FC', borderTopWidth: 1, borderTopColor: '#E8DCF3', paddingHorizontal: 12, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  editBannerText: { flex: 1, color: colors.mutedPlum, fontSize: 11, lineHeight: 16 },
-  cancelEdit: { color: colors.plum, fontWeight: '900', fontSize: 12, marginLeft: 10 },
-  composer: { backgroundColor: colors.white, borderTopWidth: 1, borderTopColor: '#EEE6F2', padding: 10, flexDirection: 'row', alignItems: 'flex-end' },
-  input: { flex: 1, maxHeight: 120, minHeight: 46, borderRadius: 18, backgroundColor: colors.cream, paddingHorizontal: 15, paddingVertical: 12, color: colors.plum, fontSize: 15, textAlignVertical: 'top' },
-  micButton: { marginLeft: 7, width: 46, height: 46, borderRadius: 23, backgroundColor: colors.mint, alignItems: 'center', justifyContent: 'center' },
-  micButtonActive: { backgroundColor: colors.babyPink },
-  micButtonText: { fontSize: 18, color: colors.plum, fontWeight: '900' },
-  send: { marginLeft: 7, width: 46, height: 46, borderRadius: 23, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
-  sendDisabled: { opacity: .45 },
-  sendText: { color: colors.white, fontSize: 25, fontWeight: '900' },
-  helper: { fontSize: 10, color: colors.mutedPlum, textAlign: 'center', paddingVertical: 7, backgroundColor: colors.white },
+  backButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' }, back: { fontSize: 34, color: colors.plum },
+  brandRow: { flexDirection: 'row', alignItems: 'center', flex: 1, justifyContent: 'center' }, avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginRight: 9 }, avatarText: { color: colors.white, fontWeight: '900', fontSize: 19 },
+  headerTitle: { fontSize: 18, fontWeight: '900', color: colors.plum }, headerSub: { fontSize: 11, color: colors.mutedPlum, marginTop: 2 }, scroll: { flex: 1 }, messages: { padding: 16, paddingBottom: 120 },
+  brandIntro: { alignItems: 'center', paddingVertical: 12 }, flowerMark: { width: 60, height: 60, borderRadius: 30, backgroundColor: colors.softPink, alignItems: 'center', justifyContent: 'center' }, flower: { fontSize: 31 }, brandName: { fontSize: 20, fontWeight: '900', color: colors.plum, marginTop: 8 }, brandTagline: { fontSize: 12, color: colors.mutedPlum, marginTop: 2 },
+  bubble: { maxWidth: '92%', borderRadius: 20, padding: 14, marginBottom: 10 }, yayaBubble: { backgroundColor: colors.white, alignSelf: 'flex-start', borderTopLeftRadius: 7 }, userBubble: { backgroundColor: colors.primary, alignSelf: 'flex-end', borderTopRightRadius: 7 }, bubbleHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 }, bubbleText: { flex: 1, color: colors.plum, fontSize: 15, lineHeight: 22 }, userText: { color: colors.white }, listen: { fontSize: 16 }, userActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginTop: 8 }, editedLabel: { color: 'rgba(255,255,255,0.75)', fontSize: 11 }, editButton: { color: colors.white, fontWeight: '800', fontSize: 12 },
+  listeningCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFF0F6', borderRadius: 18, padding: 14, marginTop: 4 }, pulse: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' }, mic: { fontSize: 22 }, listeningTitle: { color: colors.plum, fontWeight: '900', fontSize: 14 }, listeningCopy: { color: colors.mutedPlum, fontSize: 12, lineHeight: 17, marginTop: 2 }, speechHint: { color: colors.mutedPlum, textAlign: 'center', fontSize: 11, marginTop: 8 },
+  editBanner: { marginHorizontal: 12, marginBottom: 7, backgroundColor: '#F5F0FC', borderRadius: 14, padding: 10, flexDirection: 'row', alignItems: 'center', gap: 10 }, editBannerText: { flex: 1, color: colors.plum, fontSize: 12 }, cancelEdit: { color: colors.primary, fontWeight: '800', fontSize: 12 },
+  composer: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, padding: 10, backgroundColor: colors.white, borderTopWidth: 1, borderTopColor: '#EEE6F2' }, input: { flex: 1, minHeight: 48, maxHeight: 130, backgroundColor: colors.cream, borderRadius: 18, paddingHorizontal: 15, paddingVertical: 12, color: colors.plum, fontSize: 15, lineHeight: 21 },
+  micButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#F5F0FC', alignItems: 'center', justifyContent: 'center' }, micButtonActive: { backgroundColor: colors.softPink }, micButtonText: { fontSize: 20 }, send: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }, sendDisabled: { opacity: 0.45 }, sendText: { color: colors.white, fontSize: 24, fontWeight: '900' }, helper: { color: colors.mutedPlum, fontSize: 10, textAlign: 'center', paddingVertical: 5, paddingHorizontal: 12 },
 });
